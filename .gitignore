@@ -1,2 +1,9 @@
-venv/
+# Secretos y contraseñas
 .env
+credenciales.json
+
+# Entornos virtuales y caché de Python
+venv/
+env/
+__pycache__/
+*.pyc

@@ -18,6 +18,6 @@ Aquí iré documentando mi progreso en el proyecto:
 - [x] Definir la idea y arquitectura básica del bot.
 - [x] Configurar repositorio y claves SSH en GitHub.
 - [x] Obtener el Token en BotFather (Telegram).
-- [ ] Hola Mundo en Python conectando con la API.
-- [ ] Lógica para guardar el primer gasto.
+- [x] Hola Mundo en Python conectando con la API.
+- [x] Lógica para guardar el primer gasto.
 - [ ] Implementar sistema de "Barra de salud" y "Objetivos/Bote".
