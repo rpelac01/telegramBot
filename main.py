@@ -38,14 +38,12 @@ def obtener_saldos():
         saldos = {"Banco": 0.0, "Cartera": 0.0, "Hucha": 0.0}
         
         for fila in registros:
-            # Si la fila no tiene al menos 5 columnas, la saltamos
             if len(fila) < 5: 
                 continue 
                 
             tipo = fila[1]
             cuenta = fila[2]
             
-            # Limpiamos el texto por si hay símbolos de euro o comas
             texto_num = str(fila[3]).replace('€', '').replace(' ', '').replace(',', '.')
             cantidad = float(texto_num)
             
@@ -69,6 +67,7 @@ def enviar_bienvenida(mensaje):
         "Comandos disponibles:\n"
         "🟢 /ingreso [cantidad] [concepto]\n"
         "🔴 /gasto [cantidad] [concepto]\n"
+        "🔄 /traspaso [cantidad] [origen] [destino]\n"
         "📊 /saldos (para ver tu dinero actual)"
     )
     bot.reply_to(mensaje, texto)
@@ -87,7 +86,6 @@ def registro_gasto(mensaje):
     try:
         cantidad_num = float(cantidad.replace(",", ".")) 
         
-        # Leemos el estado actual antes de gastar
         saldos = obtener_saldos()
         dinero_total_previo = saldos["Banco"] + saldos["Cartera"] + saldos["Hucha"]
         
@@ -101,10 +99,8 @@ def registro_gasto(mensaje):
             
         nuevo_saldo_total = dinero_total_previo - cantidad_num
             
-        # Guardamos en Sheets (6 columnas)
         hoja_registro.append_row([fecha_actual, "Gasto", cuenta_afectada, cantidad_num, concepto, nuevo_saldo_total])
         
-        # Recalculamos para mostrar el resultado final
         saldos_nuevos = obtener_saldos()
         
         mensaje_final = f"📉 🔴 **¡Gasto apuntado!**\n"
@@ -139,11 +135,26 @@ def registro_ingreso(mensaje):
         dinero_total_previo = saldos["Banco"] + saldos["Cartera"] + saldos["Hucha"]
         nuevo_saldo_total = dinero_total_previo + cantidad_num
             
-        # Los ingresos van siempre al Banco por defecto
         hoja_registro.append_row([fecha_actual, "Ingreso", "Banco", cantidad_num, concepto, nuevo_saldo_total])
+        
+        saldos_nuevos = obtener_saldos()
+        
+        mensaje_final = f"📈 🟢 **¡Ingreso apuntado!**\n"
+        mensaje_final += f"Has sumado {cantidad_num}€ de: *{concepto}*\n\n"
+        mensaje_final += f"🏦 **Banco:** {saldos_nuevos['Banco']:.2f}€\n"
+        mensaje_final += f"👛 **Cartera:** {saldos_nuevos['Cartera']:.2f}€\n"
+        mensaje_final += f"🐷 **Hucha:** {saldos_nuevos['Hucha']:.2f}€\n"
+        mensaje_final += f"➡️ **DINERO GLOBAL:** {nuevo_saldo_total:.2f}€"
+        
+        bot.reply_to(mensaje, mensaje_final, parse_mode="Markdown")
+        
+    except ValueError:
+         bot.reply_to(mensaje, "⚠️ Error: La cantidad debe ser un número (ej: 15.50).")
+    except Exception as e:
+        bot.reply_to(mensaje, f"❌ Hubo un problema: {e}")
+
 @bot.message_handler(commands=['traspaso'])
 def registro_traspaso(mensaje):
-    # Separamos el mensaje en 4 trozos: comando, cantidad, origen, destino
     trozos = mensaje.text.split(" ")
     
     if len(trozos) < 4:
@@ -151,7 +162,6 @@ def registro_traspaso(mensaje):
         return
     
     cantidad = trozos[1]
-    # .capitalize() pone la primera letra en mayúscula automáticamente (ej: banco -> Banco)
     origen = trozos[2].capitalize()
     destino = trozos[3].capitalize()
     fecha_actual = datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -165,16 +175,13 @@ def registro_traspaso(mensaje):
     try:
         cantidad_num = float(cantidad.replace(",", ".")) 
         
-        # Leemos los saldos previos
         saldos = obtener_saldos()
         dinero_total = saldos["Banco"] + saldos["Cartera"] + saldos["Hucha"]
         
-        # 1. Creamos la fila de SALIDA del origen
+        # Guardamos las dos operaciones
         hoja_registro.append_row([fecha_actual, "Gasto", origen, cantidad_num, f"🔄 Traspaso a {destino}", dinero_total])
-        # 2. Creamos la fila de ENTRADA al destino
         hoja_registro.append_row([fecha_actual, "Ingreso", destino, cantidad_num, f"🔄 Traspaso desde {origen}", dinero_total])
         
-        # Recalculamos para ver cómo ha quedado todo
         saldos_nuevos = obtener_saldos()
         
         mensaje_final = f"🔄 **¡Traspaso completado!**\n"
@@ -189,3 +196,25 @@ def registro_traspaso(mensaje):
          bot.reply_to(mensaje, "⚠️ Error: La cantidad debe ser un número (ej: 15.50).")
     except Exception as e:
         bot.reply_to(mensaje, f"❌ Hubo un problema al hacer el traspaso: {e}")
+
+@bot.message_handler(commands=['saldos'])
+def ver_saldos(mensaje):
+    try:
+        saldos = obtener_saldos()
+        dinero_total = saldos["Banco"] + saldos["Cartera"] + saldos["Hucha"]
+        
+        mensaje_final = f"📊 **RESUMEN DE TUS CUENTAS**\n\n"
+        mensaje_final += f"🏦 **Banco:** {saldos['Banco']:.2f}€\n"
+        mensaje_final += f"👛 **Cartera:** {saldos['Cartera']:.2f}€\n"
+        mensaje_final += f"🐷 **Hucha:** {saldos['Hucha']:.2f}€\n"
+        mensaje_final += f"➡️ **DINERO GLOBAL:** {dinero_total:.2f}€"
+        
+        bot.reply_to(mensaje, mensaje_final, parse_mode="Markdown")
+    except Exception as e:
+        bot.reply_to(mensaje, f"❌ Hubo un problema al leer los saldos: {e}")
+
+# ==========================================
+# 5. INICIAR EL BOT (Siempre al final)
+# ==========================================
+print("🤖 Bot encendido y esperando mensajes... 🚀")
+bot.infinity_polling()
