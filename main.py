@@ -212,7 +212,50 @@ def ver_saldos(mensaje):
         bot.reply_to(mensaje, mensaje_final, parse_mode="Markdown")
     except Exception as e:
         bot.reply_to(mensaje, f"❌ Hubo un problema al leer los saldos: {e}")
+@bot.message_handler(commands=['retiro'])
+def registro_retiro(mensaje):
+    # Separamos en 4 partes: comando, cantidad, cuenta, concepto
+    trozos = mensaje.text.split(" ", 3) 
+    
+    if len(trozos) < 4:
+        bot.reply_to(mensaje, "⚠️ Error. Úsalo así: /retiro [cantidad] [cuenta] [concepto]\nEjemplo: /retiro 50 Banco Error tecleo")
+        return
+    
+    cantidad = trozos[1]
+    cuenta_afectada = trozos[2].capitalize()
+    concepto = trozos[3]
+    fecha_actual = datetime.now().strftime("%Y-%m-%d %H:%M")
+    
+    cuentas_validas = ["Banco", "Cartera", "Hucha"]
 
+    if cuenta_afectada not in cuentas_validas:
+        bot.reply_to(mensaje, "⚠️ Error: Las cuentas deben ser Banco, Cartera o Hucha.")
+        return
+
+    try:
+        cantidad_num = float(cantidad.replace(",", ".")) 
+        
+        saldos = obtener_saldos()
+        dinero_total_previo = saldos["Banco"] + saldos["Cartera"] + saldos["Hucha"]
+        nuevo_saldo_total = dinero_total_previo - cantidad_num
+            
+        # Lo guardamos como un gasto específico en esa cuenta
+        hoja_registro.append_row([fecha_actual, "Gasto", cuenta_afectada, cantidad_num, f"⚙️ Ajuste: {concepto}", nuevo_saldo_total])
+        
+        saldos_nuevos = obtener_saldos()
+        
+        mensaje_final = f"⚙️ 🔴 **¡Ajuste aplicado!**\n"
+        mensaje_final += f"Has restado {formato_eur(cantidad_num)}€ de *{cuenta_afectada}* ({concepto})\n\n"
+        mensaje_final += f"🏦 **Banco:** {formato_eur(saldos_nuevos['Banco'])}€\n"
+        mensaje_final += f"👛 **Cartera:** {formato_eur(saldos_nuevos['Cartera'])}€\n"
+        mensaje_final += f"🐷 **Hucha:** {formato_eur(saldos_nuevos['Hucha'])}€\n"
+        
+        bot.reply_to(mensaje, mensaje_final, parse_mode="Markdown")
+        
+    except ValueError:
+         bot.reply_to(mensaje, "⚠️ Error: La cantidad debe ser un número (ej: 15.50).")
+    except Exception as e:
+        bot.reply_to(mensaje, f"❌ Hubo un problema al hacer el ajuste: {e}")
 # ==========================================
 # 5. INICIAR EL BOT (Siempre al final)
 # ==========================================
