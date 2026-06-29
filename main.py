@@ -5,37 +5,77 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
 
-# 1. Cargar variables de entorno (tu token de Telegram)
+# ==========================================
+# 1. CONFIGURACIÓN INICIAL Y TELEGRAM
+# ==========================================
 load_dotenv()
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 bot = telebot.TeleBot(TOKEN)
 
+# ==========================================
 # 2. CONFIGURACIÓN DE GOOGLE SHEETS
-NOMBRE_HOJA = "Mis Finanzas Cloud" # Pon aquí el nombre exacto de tu Excel en Google Drive
+# ==========================================
+NOMBRE_HOJA = "Mis Finanzas Cloud"
 
-# Configurar el acceso con tu archivo JSON
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 credenciales = ServiceAccountCredentials.from_json_keyfile_name('credenciales.json', scope)
 cliente_google = gspread.authorize(credenciales)
 
-# 3. Conectar con la hoja al iniciar el bot
 try:
     hoja_calculo = cliente_google.open(NOMBRE_HOJA)
-    hoja_registro = hoja_calculo.sheet1  # Primera pestaña de la hoja
+    hoja_registro = hoja_calculo.sheet1
     print(f"✅ Conectado con éxito a la hoja de Google: {NOMBRE_HOJA}")
 except Exception as e:
     print(f"❌ Error al conectar con Google Sheets: {e}")
-    print("⚠️ Revisa que la hoja se llame igual y esté compartida con el correo del bot.")
 
+# ==========================================
+# 3. LÓGICA DE CÁLCULO DE SALDOS
+# ==========================================
+def obtener_saldos():
+    try:
+        registros = hoja_registro.get_all_values()[1:] 
+        
+        saldos = {"Banco": 0.0, "Cartera": 0.0, "Hucha": 0.0}
+        
+        for fila in registros:
+            # Si la fila no tiene al menos 5 columnas, la saltamos
+            if len(fila) < 5: 
+                continue 
+                
+            tipo = fila[1]
+            cuenta = fila[2]
+            
+            # Limpiamos el texto por si hay símbolos de euro o comas
+            texto_num = str(fila[3]).replace('€', '').replace(' ', '').replace(',', '.')
+            cantidad = float(texto_num)
+            
+            if tipo == 'Ingreso' and cuenta in saldos:
+                saldos[cuenta] += cantidad
+            elif tipo == 'Gasto' and cuenta in saldos:
+                saldos[cuenta] -= cantidad
+                
+        return saldos
+    except Exception as e:
+        print(f"Error al calcular saldos: {e}")
+        return {"Banco": 0.0, "Cartera": 0.0, "Hucha": 0.0}
+
+# ==========================================
 # 4. COMANDOS DEL BOT
+# ==========================================
 @bot.message_handler(commands=["start"])
 def enviar_bienvenida(mensaje):
-    bot.reply_to(mensaje, "Hola, vamos a controlar tus gastos en la nube ☁️💸\nEscribe /gasto [cantidad] [concepto]")
+    texto = (
+        "¡Hola! Tu sistema financiero está listo ☁️💸\n\n"
+        "Comandos disponibles:\n"
+        "🟢 /ingreso [cantidad] [concepto]\n"
+        "🔴 /gasto [cantidad] [concepto]\n"
+        "📊 /saldos (para ver tu dinero actual)"
+    )
+    bot.reply_to(mensaje, texto)
 
 @bot.message_handler(commands=['gasto'])
 def registro_gasto(mensaje):
     trozos = mensaje.text.split(" ", 2)
-    
     if len(trozos) < 3:
         bot.reply_to(mensaje, "⚠️ Error. Úsalo así: /gasto [cantidad] [concepto]")
         return
@@ -45,22 +85,45 @@ def registro_gasto(mensaje):
     fecha_actual = datetime.now().strftime("%Y-%m-%d %H:%M")
 
     try:
-        # Reemplazamos coma por punto por si escribes "10,50" en vez de "10.50"
         cantidad_num = float(cantidad.replace(",", ".")) 
         
-        # Insertar los datos en Google Sheets en la siguiente fila vacía
-        hoja_registro.append_row([fecha_actual, "Gasto", cantidad_num, concepto])
+        # Leemos el estado actual antes de gastar
+        saldos = obtener_saldos()
+        dinero_total_previo = saldos["Banco"] + saldos["Cartera"] + saldos["Hucha"]
         
-        bot.reply_to(mensaje, f"☁️ ✅ ¡Guardado en la nube! Has gastado {cantidad_num}€ en: {concepto}")
+        # REGLA: Si no hay en Cartera, sale del Banco
+        if saldos["Cartera"] <= 0:
+            cuenta_afectada = "Banco"
+            aviso = "\n⚠️ *Atención:* Sacado del Banco porque la Cartera está a 0."
+        else:
+            cuenta_afectada = "Cartera"
+            aviso = ""
+            
+        nuevo_saldo_total = dinero_total_previo - cantidad_num
+            
+        # Guardamos en Sheets (6 columnas)
+        hoja_registro.append_row([fecha_actual, "Gasto", cuenta_afectada, cantidad_num, concepto, nuevo_saldo_total])
+        
+        # Recalculamos para mostrar el resultado final
+        saldos_nuevos = obtener_saldos()
+        
+        mensaje_final = f"📉 🔴 **¡Gasto apuntado!**\n"
+        mensaje_final += f"Has gastado {cantidad_num}€ en: *{concepto}*{aviso}\n\n"
+        mensaje_final += f"🏦 **Banco:** {saldos_nuevos['Banco']:.2f}€\n"
+        mensaje_final += f"👛 **Cartera:** {saldos_nuevos['Cartera']:.2f}€\n"
+        mensaje_final += f"🐷 **Hucha:** {saldos_nuevos['Hucha']:.2f}€\n"
+        mensaje_final += f"➡️ **DINERO GLOBAL:** {nuevo_saldo_total:.2f}€"
+        
+        bot.reply_to(mensaje, mensaje_final, parse_mode="Markdown")
         
     except ValueError:
          bot.reply_to(mensaje, "⚠️ Error: La cantidad debe ser un número (ej: 15.50).")
     except Exception as e:
-        bot.reply_to(mensaje, f"❌ Hubo un problema al guardar en Google Sheets: {e}")
+        bot.reply_to(mensaje, f"❌ Hubo un problema: {e}")
+
 @bot.message_handler(commands=['ingreso'])
 def registro_ingreso(mensaje):
     trozos = mensaje.text.split(" ", 2)
-    
     if len(trozos) < 3:
         bot.reply_to(mensaje, "⚠️ Error. Úsalo así: /ingreso [cantidad] [concepto]")
         return
@@ -72,15 +135,9 @@ def registro_ingreso(mensaje):
     try:
         cantidad_num = float(cantidad.replace(",", ".")) 
         
-        # Guardamos en Sheets con la etiqueta "Ingreso"
-        hoja_registro.append_row([fecha_actual, "Ingreso", cantidad_num, concepto])
-        
-        bot.reply_to(mensaje, f"☁️ 📈 ¡Ingreso guardado! Has sumado {cantidad_num}€ de: {concepto}")
-        
-    except ValueError:
-         bot.reply_to(mensaje, "⚠️ Error: La cantidad debe ser un número (ej: 15.50).")
-    except Exception as e:
-        bot.reply_to(mensaje, f"❌ Hubo un problema al guardar en Google Sheets: {e}")
-# 5. MANTENER EL BOT ESCUCHANDO (¡Siempre al final!)
-print("🤖 Bot encendido y esperando mensajes... 🚀")
-bot.infinity_polling()
+        saldos = obtener_saldos()
+        dinero_total_previo = saldos["Banco"] + saldos["Cartera"] + saldos["Hucha"]
+        nuevo_saldo_total = dinero_total_previo + cantidad_num
+            
+        # Los ingresos van siempre al Banco por defecto
+        hoja_registro.append_row([fecha_actual, "Ingreso", "Banco", cantidad_num, concepto, nuevo_saldo_total])

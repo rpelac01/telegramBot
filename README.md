@@ -20,4 +20,12 @@ Aquí iré documentando mi progreso en el proyecto:
 - [x] Obtener el Token en BotFather (Telegram).
 - [x] Hola Mundo en Python conectando con la API.
 - [x] Lógica para guardar el primer gasto.
-- [ ] Implementar sistema de "Barra de salud" y "Objetivos/Bote".
+- [x] Implementar sistema de "Barra de salud" y "Objetivos/Bote".
+## 🏗️ La Nueva Arquitectura de tus Cuentas
+Tu sistema ahora se divide en tres bloques independientes:
+
+🏦 Total (El Banco): Tu cuenta principal. Recibe tu nómina o ingresos principales.
+
+👛 Cartera (La Semana): Tu saldo "líquido" para el día a día. Se alimenta del Banco. Aquí es donde registrarás los gastos de cafés, cenas, etc.
+
+🐷 Hucha (Ahorro Intocable): Un agujero negro positivo. Lo que entra aquí, no sale para gastos corrientes.
