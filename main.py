@@ -362,6 +362,21 @@ def guardar_meta(nueva_meta):
     """Guarda la nueva meta en el archivo"""
     with open("meta.txt", "w") as f:
         f.write(str(nueva_meta))
+
+def barra_progreso(saldo, meta):
+    """Crea una barra de progreso visual tipo: [████░░░░░░] 40.0%"""
+    if meta <= 0: return ""
+    
+    porcentaje = (saldo / meta) * 100
+    # Limitamos la barra visual a 100 para que no se desborde si te pasas
+    porcentaje_visual = min(porcentaje, 100) 
+    
+    # Calculamos cuántos bloques de 10 están llenos
+    bloques_llenos = int(porcentaje_visual // 10)
+    bloques_vacios = 10 - bloques_llenos
+    
+    barra = "█" * bloques_llenos + "░" * bloques_vacios
+    return f"`[{barra}]` **{porcentaje:.1f}%**"
 # 5. INICIAR EL BOT (Siempre al final)
 # ==========================================
 print("🤖 Bot encendido y esperando mensajes... 🚀")
