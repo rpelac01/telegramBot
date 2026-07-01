@@ -273,11 +273,21 @@ def registro_retiro(mensaje):
         cantidad_num = float(cantidad.replace(",", ".")) 
         
         saldos = obtener_saldos()
+        
+        # 1. Calculamos nuevo saldo global
         dinero_total_previo = saldos["Banco"] + saldos["Cartera"] + saldos["Hucha"]
         nuevo_saldo_total = dinero_total_previo - cantidad_num
             
-        # Lo guardamos como un gasto específico en esa cuenta
-        hoja_registro.append_row([fecha_actual, "Gasto", cuenta_afectada, cantidad_num, f"⚙️ {concepto}", nuevo_saldo_total, "-"])
+        # 2. Calculamos el nuevo saldo de EFECTIVO
+        efectivo_previo = saldos["Cartera"] + saldos["Hucha"]
+        if cuenta_afectada in ["Cartera", "Hucha"]:
+            nuevo_efectivo = efectivo_previo - cantidad_num
+        else:
+            # Si sacas del banco, el dinero físico (efectivo) no cambia
+            nuevo_efectivo = efectivo_previo 
+
+        # 3. Lo guardamos en el Excel (Cambiado a "Retiro" por seguridad y añadido nuevo_efectivo)
+        hoja_registro.append_row([fecha_actual, "Retiro", cuenta_afectada, cantidad_num, f"⚙️ {concepto}", nuevo_saldo_total, nuevo_efectivo])
         
         saldos_nuevos = obtener_saldos()
         
