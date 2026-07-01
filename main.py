@@ -228,10 +228,15 @@ def ver_saldos(mensaje):
         saldos = obtener_saldos()
         dinero_total = saldos["Banco"] + saldos["Cartera"] + saldos["Hucha"]
         
+        # Leemos la meta que haya guardada y pintamos la barra
+        meta_actual = obtener_meta()
+        barra_hucha = barra_progreso(saldos['Hucha'], meta_actual)
+        
         mensaje_final = f"📊 **RESUMEN DE TUS CUENTAS**\n\n"
         mensaje_final += f"🏦 **Banco:** {formato_eur(saldos['Banco'])}€\n"
         mensaje_final += f"👛 **Cartera:** {formato_eur(saldos['Cartera'])}€\n"
         mensaje_final += f"🐷 **Hucha:** {formato_eur(saldos['Hucha'])}€\n"
+        mensaje_final += f"   🎯 Meta ({formato_eur(meta_actual)}€): {barra_hucha}\n"
         mensaje_final += f"━━━━━━━━━━━━━━\n"
         mensaje_final += f"➡️ **DINERO GLOBAL:** {formato_eur(dinero_total)}€\n"
         mensaje_final += f"   💵 En Efectivo: {formato_eur(saldos['Total_Efectivo'])}€\n"
@@ -331,6 +336,32 @@ def cierre_semanal(mensaje):
             
     except Exception as e:
         bot.reply_to(mensaje, f"❌ Hubo un problema al hacer el cierre: {e}")
+@bot.message_handler(commands=['meta'])
+def cambiar_meta(mensaje):
+    trozos = mensaje.text.split(" ")
+    if len(trozos) < 2:
+        bot.reply_to(mensaje, "⚠️ Úsalo así: /meta [cantidad]\nEjemplo: /meta 1500")
+        return
+    
+    try:
+        nueva_meta = float(trozos[1].replace(",", "."))
+        guardar_meta(nueva_meta)
+        bot.reply_to(mensaje, f"🎯 ¡Meta actualizada! Tu nuevo objetivo de la Hucha es {formato_eur(nueva_meta)}€.")
+    except ValueError:
+        bot.reply_to(mensaje, "⚠️ Error: La cantidad debe ser un número (ej: 1500).")
+
+def obtener_meta():
+    """Lee la meta desde un archivo para que no se borre al reiniciar"""
+    try:
+        with open("meta.txt", "r") as f:
+            return float(f.read().strip())
+    except FileNotFoundError:
+        return 1000.0  # Meta por defecto de 1000€ si no has puesto nada aún
+
+def guardar_meta(nueva_meta):
+    """Guarda la nueva meta en el archivo"""
+    with open("meta.txt", "w") as f:
+        f.write(str(nueva_meta))
 # 5. INICIAR EL BOT (Siempre al final)
 # ==========================================
 print("🤖 Bot encendido y esperando mensajes... 🚀")
