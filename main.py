@@ -4,6 +4,8 @@ from dotenv import load_dotenv
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
+from flask import Flask
+from threading import Thread
 
 # ==========================================
 # 1. CONFIGURACIÓN INICIAL Y TELEGRAM
@@ -353,17 +355,19 @@ def cambiar_meta(mensaje):
         bot.reply_to(mensaje, "⚠️ Error: La cantidad debe ser un número (ej: 1500).")
 
 def obtener_meta():
-    """Lee la meta desde un archivo para que no se borre al reiniciar"""
+    """Lee la meta directamente desde la celda J1 de Google Sheets"""
     try:
-        with open("meta.txt", "r") as f:
-            return float(f.read().strip())
-    except FileNotFoundError:
-        return 1000.0  # Meta por defecto de 1000€ si no has puesto nada aún
+        # Busca el valor en la celda J1
+        valor = hoja_registro.acell('J1').value
+        if valor is None or str(valor).strip() == "":
+            return 1000.0
+        return float(str(valor).replace(",", "."))
+    except Exception:
+        return 1000.0  # Meta por defecto si hay algún error
 
 def guardar_meta(nueva_meta):
-    """Guarda la nueva meta en el archivo"""
-    with open("meta.txt", "w") as f:
-        f.write(str(nueva_meta))
+    """Guarda la nueva meta en la celda J1"""
+    hoja_registro.update_acell('J1', nueva_meta)
 
 def barra_progreso(saldo, meta):
     """Crea una barra de progreso visual tipo: [████░░░░░░] 40.0%"""
@@ -379,7 +383,19 @@ def barra_progreso(saldo, meta):
     
     barra = "█" * bloques_llenos + "░" * bloques_vacios
     return f"`[{barra}]` **{porcentaje:.1f}%**"
-# 5. INICIAR EL BOT (Siempre al final)
 # ==========================================
-print("🤖 Bot encendido y esperando mensajes... 🚀")
+# 5. SERVIDOR WEB (Para engañar a Render) Y ARRANQUE
+# ==========================================
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "¡El bot de finanzas está funcionando perfectamente! 🚀"
+
+def run_web():
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host="0.0.0.0", port=port)
+
+print("🤖 Arrancando servidor y bot...")
+Thread(target=run_web).start()
 bot.infinity_polling()
