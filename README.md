@@ -29,3 +29,15 @@ Tu sistema ahora se divide en tres bloques independientes:
 👛 Cartera (La Semana): Tu saldo "líquido" para el día a día. Se alimenta del Banco. Aquí es donde registrarás los gastos de cafés, cenas, etc.
 
 🐷 Hucha (Ahorro Intocable): Un agujero negro positivo. Lo que entra aquí, no sale para gastos corrientes.
+
+## COMANDOS
+* **`/start`** - Muestra el mensaje de bienvenida y el resumen de los comandos básicos.
+* **`/ingreso [cantidad] [concepto]`** - Añade dinero directamente a la cuenta principal (Banco). Por defecto, asume que es dinero digital (transferencia/tarjeta).
+  * *Ejemplo:* `/ingreso 1200 Nómina mes de julio`
+* **`/gasto [cantidad] [concepto] [si/no]`** - Registra un gasto. Si hay saldo en la *Cartera*, lo resta de ahí; si está a cero, lo resta del *Banco*. El último parámetro (opcional) indica si el pago fue en efectivo (`si`) o con tarjeta (`no`). Si se omite, asume que es tarjeta.
+  * *Ejemplo:* `/gasto 2.50 Café si`
+* **`/traspaso [cantidad] [origen] [destino]`** - Mueve fondos entre las tres cuentas disponibles (Banco, Cartera, Hucha) sin alterar el saldo global.
+  * *Ejemplo:* `/traspaso 50 Banco Cartera`
+* **`/retiro [cantidad] [cuenta] [concepto]`** - Fuerza la resta de una cantidad específica de una cuenta. Ideal para corregir errores manuales (ajustes).
+  * *Ejemplo:* `/retiro 15 Banco Error al teclear gasto anterior`
+* **`/saldos`** - Imprime un ticket virtual con el estado actual de todas las cuentas, el dinero global y un desglose exacto de cuánto tienes en Efectivo frente a lo que tienes en el Banco/Tarjeta.

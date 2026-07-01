@@ -35,28 +35,53 @@ def obtener_saldos():
     try:
         registros = hoja_registro.get_all_values()[1:] 
         
-        saldos = {"Banco": 0.0, "Cartera": 0.0, "Hucha": 0.0}
+        saldos = {
+            "Banco": 0.0, "Cartera": 0.0, "Hucha": 0.0,
+            "Total_Efectivo": 0.0, "Total_Tarjeta": 0.0
+        }
         
         for fila in registros:
-            if len(fila) < 5: 
+            if len(fila) < 4: 
                 continue 
                 
             tipo = fila[1]
             cuenta = fila[2]
             
+            # Limpiamos y convertimos la cantidad (Columna D)
             texto_num = str(fila[3]).replace('€', '').replace(' ', '').replace(',', '.')
             cantidad = float(texto_num)
             
+            # Limpiamos el texto de Efectivo (Columna G) a prueba de errores
+            if len(fila) >= 7:
+                # .strip() quita espacios fantasma y .lower() lo pasa a minúsculas
+                es_efectivo = str(fila[6]).strip().lower()
+            else:
+                es_efectivo = "no"
+                
+            # 1. Sumamos/Restamos a las cuentas normales
             if tipo == 'Ingreso' and cuenta in saldos:
                 saldos[cuenta] += cantidad
             elif tipo == 'Gasto' and cuenta in saldos:
                 saldos[cuenta] -= cantidad
                 
+            # 2. Sumamos/Restamos a los globales (Efectivo vs Tarjeta)
+            if es_efectivo != "-": 
+                if tipo == 'Ingreso':
+                    # Ahora da igual si pones "Si ", "SI", " sí " o "si"... lo va a detectar
+                    if es_efectivo in ["si", "sí"]: 
+                        saldos["Total_Efectivo"] += cantidad
+                    else: 
+                        saldos["Total_Tarjeta"] += cantidad
+                elif tipo == 'Gasto':
+                    if es_efectivo in ["si", "sí"]: 
+                        saldos["Total_Efectivo"] -= cantidad
+                    else: 
+                        saldos["Total_Tarjeta"] -= cantidad
+                
         return saldos
     except Exception as e:
         print(f"Error al calcular saldos: {e}")
-        return {"Banco": 0.0, "Cartera": 0.0, "Hucha": 0.0}
-
+        return {"Banco": 0.0, "Cartera": 0.0, "Hucha": 0.0, "Total_Efectivo": 0.0, "Total_Tarjeta": 0.0}
 # ==========================================
 # 4. COMANDOS DEL BOT
 # ==========================================
@@ -99,7 +124,7 @@ def registro_gasto(mensaje):
             
         nuevo_saldo_total = dinero_total_previo - cantidad_num
             
-        hoja_registro.append_row([fecha_actual, "Gasto", cuenta_afectada, cantidad_num, concepto, nuevo_saldo_total])
+        hoja_registro.append_row([fecha_actual, "Gasto", cuenta_afectada, cantidad_num, concepto, nuevo_saldo_total, es_efectivo])
         
         saldos_nuevos = obtener_saldos()
         
@@ -135,7 +160,7 @@ def registro_ingreso(mensaje):
         dinero_total_previo = saldos["Banco"] + saldos["Cartera"] + saldos["Hucha"]
         nuevo_saldo_total = dinero_total_previo + cantidad_num
             
-        hoja_registro.append_row([fecha_actual, "Ingreso", "Banco", cantidad_num, concepto, nuevo_saldo_total])
+        hoja_registro.append_row([fecha_actual, "Ingreso", "Banco", cantidad_num, concepto, nuevo_saldo_total, "No"])
         
         saldos_nuevos = obtener_saldos()
         
@@ -179,8 +204,8 @@ def registro_traspaso(mensaje):
         dinero_total = saldos["Banco"] + saldos["Cartera"] + saldos["Hucha"]
         
         # Guardamos las dos operaciones
-        hoja_registro.append_row([fecha_actual, "Gasto", origen, cantidad_num, f"🔄 Traspaso a {destino}", dinero_total])
-        hoja_registro.append_row([fecha_actual, "Ingreso", destino, cantidad_num, f"🔄 Traspaso desde {origen}", dinero_total])
+        hoja_registro.append_row([fecha_actual, "Gasto", origen, cantidad_num, f"🔄 A {destino}", dinero_total, "-"])
+        hoja_registro.append_row([fecha_actual, "Ingreso", destino, cantidad_num, f"🔄 Desde {origen}", dinero_total, "-"])
         
         saldos_nuevos = obtener_saldos()
         
@@ -204,10 +229,13 @@ def ver_saldos(mensaje):
         dinero_total = saldos["Banco"] + saldos["Cartera"] + saldos["Hucha"]
         
         mensaje_final = f"📊 **RESUMEN DE TUS CUENTAS**\n\n"
-        mensaje_final += f"🏦 **Banco:** {saldos['Banco']:.2f}€\n"
-        mensaje_final += f"👛 **Cartera:** {saldos['Cartera']:.2f}€\n"
-        mensaje_final += f"🐷 **Hucha:** {saldos['Hucha']:.2f}€\n"
-        mensaje_final += f"➡️ **DINERO GLOBAL:** {dinero_total:.2f}€"
+        mensaje_final += f"🏦 **Banco:** {formato_eur(saldos['Banco'])}€\n"
+        mensaje_final += f"👛 **Cartera:** {formato_eur(saldos['Cartera'])}€\n"
+        mensaje_final += f"🐷 **Hucha:** {formato_eur(saldos['Hucha'])}€\n"
+        mensaje_final += f"━━━━━━━━━━━━━━\n"
+        mensaje_final += f"➡️ **DINERO GLOBAL:** {formato_eur(dinero_total)}€\n"
+        mensaje_final += f"   💵 En Efectivo: {formato_eur(saldos['Total_Efectivo'])}€\n"
+        mensaje_final += f"   💳 En Banco/Tarjeta: {formato_eur(saldos['Total_Tarjeta'])}€"
         
         bot.reply_to(mensaje, mensaje_final, parse_mode="Markdown")
     except Exception as e:
@@ -240,7 +268,7 @@ def registro_retiro(mensaje):
         nuevo_saldo_total = dinero_total_previo - cantidad_num
             
         # Lo guardamos como un gasto específico en esa cuenta
-        hoja_registro.append_row([fecha_actual, "Gasto", cuenta_afectada, cantidad_num, f"⚙️ Ajuste: {concepto}", nuevo_saldo_total])
+        hoja_registro.append_row([fecha_actual, "Gasto", cuenta_afectada, cantidad_num, f"⚙️ {concepto}", nuevo_saldo_total, "-"])
         
         saldos_nuevos = obtener_saldos()
         
@@ -257,6 +285,52 @@ def registro_retiro(mensaje):
     except Exception as e:
         bot.reply_to(mensaje, f"❌ Hubo un problema al hacer el ajuste: {e}")
 # ==========================================
+def formato_eur(numero):
+    """Convierte 1250.5 a '1.250,50'"""
+    texto = f"{numero:,.2f}"
+    texto = texto.replace(",", "X").replace(".", ",").replace("X", ".")
+    return texto
+@bot.message_handler(commands=['cierre'])
+def cierre_semanal(mensaje):
+    try:
+        saldos = obtener_saldos()
+        saldo_cartera = saldos["Cartera"]
+        dinero_total = saldos["Banco"] + saldos["Cartera"] + saldos["Hucha"]
+        fecha_actual = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+        if saldo_cartera > 0:
+            # 1. Sacamos el sobrante de la Cartera
+            hoja_registro.append_row([fecha_actual, "Gasto", "Cartera", saldo_cartera, "🏁 Cierre: Vaciado de Cartera", dinero_total, "-"])
+            # 2. Lo metemos en la Hucha como premio
+            hoja_registro.append_row([fecha_actual, "Ingreso", "Hucha", saldo_cartera, "🎉 Cierre: Ahorro semanal", dinero_total, "-"])
+            
+            saldos_nuevos = obtener_saldos()
+            
+            mensaje_final = f"🏆 **¡CIERRE SEMANAL SUPERADO!** 🏆\n\n"
+            mensaje_final += f"¡Enhorabuena! Te han sobrado {formato_eur(saldo_cartera)}€ en tu presupuesto.\n"
+            mensaje_final += f"Ese dinero se ha guardado automáticamente en tu **Hucha** 🐷.\n\n"
+            mensaje_final += f"📊 **TUS NUEVOS SALDOS:**\n"
+            mensaje_final += f"🏦 **Banco:** {formato_eur(saldos_nuevos['Banco'])}€\n"
+            mensaje_final += f"👛 **Cartera:** {formato_eur(saldos_nuevos['Cartera'])}€ *(Lista para recargar)*\n"
+            mensaje_final += f"🐷 **Hucha:** {formato_eur(saldos_nuevos['Hucha'])}€\n"
+            
+            bot.reply_to(mensaje, mensaje_final, parse_mode="Markdown")
+
+        elif saldo_cartera == 0:
+            mensaje_final = f"⚖️ **CIERRE SEMANAL** ⚖️\n\n"
+            mensaje_final += "Has clavado el presupuesto exacto. Tu Cartera está a 0€.\n"
+            mensaje_final += "No hay ahorros extra esta semana, pero al menos no has tenido que tirar del Banco. ¡Lista para la recarga! 🔋\n"
+            
+            bot.reply_to(mensaje, mensaje_final, parse_mode="Markdown")
+            
+        else:
+            mensaje_final = f"⚠️ **CIERRE SEMANAL: NÚMEROS ROJOS** ⚠️\n\n"
+            mensaje_final += "Tu cartera está en negativo. Recuerda ajustar mejor el presupuesto la próxima semana para no tener que tirar de tus ahorros.\n"
+            
+            bot.reply_to(mensaje, mensaje_final, parse_mode="Markdown")
+            
+    except Exception as e:
+        bot.reply_to(mensaje, f"❌ Hubo un problema al hacer el cierre: {e}")
 # 5. INICIAR EL BOT (Siempre al final)
 # ==========================================
 print("🤖 Bot encendido y esperando mensajes... 🚀")
