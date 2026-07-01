@@ -91,12 +91,14 @@ def enviar_bienvenida(mensaje):
         "¡Hola! Tu sistema financiero está listo ☁️💸\n\n"
         "Comandos disponibles:\n"
         "🟢 /ingreso [cantidad] [concepto]\n"
-        "🔴 /gasto [cantidad] [concepto]\n"
+        "🔴 /gasto [cantidad] [concepto] [si/no]\n"
         "🔄 /traspaso [cantidad] [origen] [destino]\n"
-        "📊 /saldos (para ver tu dinero actual)"
+        "📊 /saldos (para ver tu dinero)\n"
+        "⚙️ /retiro [cantidad] [cuenta] [concepto]\n"
+        "🎯 /meta [cantidad] (fija tu objetivo de hucha)\n"
+        "⚖️ /cierre (vacía la cartera y ahorra el sobrante)"
     )
     bot.reply_to(mensaje, texto)
-
 @bot.message_handler(commands=['gasto'])
 def registro_gasto(mensaje):
     trozos = mensaje.text.split(" ", 2)

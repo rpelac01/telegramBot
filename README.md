@@ -30,7 +30,10 @@ Tu sistema ahora se divide en tres bloques independientes:
 
 🐷 Hucha (Ahorro Intocable): Un agujero negro positivo. Lo que entra aquí, no sale para gastos corrientes.
 
-## COMANDOS
+## 🤖 Comandos del Bot
+
+Aquí tienes la lista completa de comandos disponibles para gestionar las finanzas desde Telegram:
+
 * **`/start`** - Muestra el mensaje de bienvenida y el resumen de los comandos básicos.
 * **`/ingreso [cantidad] [concepto]`** - Añade dinero directamente a la cuenta principal (Banco). Por defecto, asume que es dinero digital (transferencia/tarjeta).
   * *Ejemplo:* `/ingreso 1200 Nómina mes de julio`
@@ -40,4 +43,7 @@ Tu sistema ahora se divide en tres bloques independientes:
   * *Ejemplo:* `/traspaso 50 Banco Cartera`
 * **`/retiro [cantidad] [cuenta] [concepto]`** - Fuerza la resta de una cantidad específica de una cuenta. Ideal para corregir errores manuales (ajustes).
   * *Ejemplo:* `/retiro 15 Banco Error al teclear gasto anterior`
-* **`/saldos`** - Imprime un ticket virtual con el estado actual de todas las cuentas, el dinero global y un desglose exacto de cuánto tienes en Efectivo frente a lo que tienes en el Banco/Tarjeta.
+* **`/saldos`** - Imprime un ticket virtual con el estado actual de todas las cuentas, el dinero global, un desglose exacto (Efectivo vs Tarjeta) y la barra de progreso de tu objetivo de ahorro.
+* **`/meta [cantidad]`** - Establece tu objetivo económico para la Hucha. Modifica la barra de progreso visible en tus saldos.
+  * *Ejemplo:* `/meta 1500`
+* **`/cierre`** - Ejecuta la rutina de cierre semanal. Calcula cuánto dinero te ha sobrado en la *Cartera*, lo mueve automáticamente a la *Hucha* como recompensa de ahorro, y deja la Cartera a 0€ lista para la siguiente semana.
