@@ -384,6 +384,9 @@ def barra_progreso(saldo, meta):
     barra = "█" * bloques_llenos + "░" * bloques_vacios
     return f"`[{barra}]` **{porcentaje:.1f}%**"
 # ==========================================
+import threading # Nos aseguramos de que esto esté cargado
+
+# ==========================================
 # 5. SERVIDOR WEB (Para engañar a Render) Y ARRANQUE
 # ==========================================
 app = Flask(__name__)
@@ -394,8 +397,22 @@ def home():
 
 def run_web():
     port = int(os.environ.get("PORT", 8080))
+    # Apagamos los mensajes molestos de Flask para ver solo nuestro bot
+    import logging
+    log = logging.getLogger('werkzeug')
+    log.setLevel(logging.ERROR)
     app.run(host="0.0.0.0", port=port)
 
-print("🤖 Arrancando servidor y bot...")
-Thread(target=run_web).start()
-bot.infinity_polling()
+print("🤖 Arrancando servidor web en segundo plano...")
+# daemon=True es la clave: si el bot muere, la web muere y Render nos avisa
+hilo_web = threading.Thread(target=run_web, daemon=True)
+hilo_web.start()
+
+print("🤖 Arrancando el bot de Telegram...")
+try:
+    # Borramos cualquier posible atasco previo en Telegram
+    bot.remove_webhook() 
+    print("✅ ¡Bot listo y esperando mensajes!")
+    bot.infinity_polling()
+except Exception as e:
+    print(f"❌ ERROR CRÍTICO AL ARRANCAR EL BOT: {e}")
