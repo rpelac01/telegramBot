@@ -155,13 +155,19 @@ def registro_gasto(mensaje):
 
 @bot.message_handler(commands=['ingreso'])
 def registro_ingreso(mensaje):
-    trozos = mensaje.text.split(" ", 2)
-    if len(trozos) < 3:
-        bot.reply_to(mensaje, "⚠️ Error. Úsalo así: /ingreso [cantidad] [concepto]")
+    # Separamos todas las palabras del mensaje
+    trozos = mensaje.text.split()
+    
+    if len(trozos) < 4:
+        bot.reply_to(mensaje, "⚠️ Error. Úsalo así: /ingreso [cantidad] [concepto] [si/no]\nEjemplo: /ingreso 50 bizum abuela no")
         return
     
     cantidad = trozos[1]
-    concepto = trozos[2]
+    # Extraemos la última palabra (si/no) y la ponemos en mayúscula
+    es_efectivo = trozos[-1].capitalize() 
+    # Unimos todas las palabras del medio para formar el concepto
+    concepto = " ".join(trozos[2:-1])
+    
     fecha_actual = datetime.now().strftime("%Y-%m-%d %H:%M")
 
     try:
@@ -170,17 +176,23 @@ def registro_ingreso(mensaje):
         saldos = obtener_saldos()
         dinero_total_previo = saldos["Banco"] + saldos["Cartera"] + saldos["Hucha"]
         nuevo_saldo_total = dinero_total_previo + cantidad_num
+        
+        # REGLA: Si es efectivo va a la Cartera, si no, va al Banco
+        if es_efectivo.lower() in ["si", "sí"]:
+            cuenta_afectada = "Cartera"
+        else:
+            cuenta_afectada = "Banco"
             
-        hoja_registro.append_row([fecha_actual, "Ingreso", "Banco", cantidad_num, concepto, nuevo_saldo_total, "No"])
+        hoja_registro.append_row([fecha_actual, "Ingreso", cuenta_afectada, cantidad_num, concepto, nuevo_saldo_total, es_efectivo])
         
         saldos_nuevos = obtener_saldos()
         
         mensaje_final = f"📈 🟢 **¡Ingreso apuntado!**\n"
-        mensaje_final += f"Has sumado {cantidad_num}€ de: *{concepto}*\n\n"
-        mensaje_final += f"🏦 **Banco:** {saldos_nuevos['Banco']:.2f}€\n"
-        mensaje_final += f"👛 **Cartera:** {saldos_nuevos['Cartera']:.2f}€\n"
-        mensaje_final += f"🐷 **Hucha:** {saldos_nuevos['Hucha']:.2f}€\n"
-        mensaje_final += f"➡️ **DINERO GLOBAL:** {nuevo_saldo_total:.2f}€"
+        mensaje_final += f"Has sumado {formato_eur(cantidad_num)}€ en *{cuenta_afectada}* de: *{concepto}*\n\n"
+        mensaje_final += f"🏦 **Banco:** {formato_eur(saldos_nuevos['Banco'])}€\n"
+        mensaje_final += f"👛 **Cartera:** {formato_eur(saldos_nuevos['Cartera'])}€\n"
+        mensaje_final += f"🐷 **Hucha:** {formato_eur(saldos_nuevos['Hucha'])}€\n"
+        mensaje_final += f"➡️ **DINERO GLOBAL:** {formato_eur(nuevo_saldo_total)}€"
         
         bot.reply_to(mensaje, mensaje_final, parse_mode="Markdown")
         
