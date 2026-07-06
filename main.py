@@ -85,175 +85,223 @@ def obtener_saldos():
         print(f"Error al calcular saldos: {e}")
         return {"Banco": 0.0, "Cartera": 0.0, "Hucha": 0.0, "Total_Efectivo": 0.0, "Total_Tarjeta": 0.0}
 # ==========================================
-# 4. COMANDOS DEL BOT
+# 4. COMANDOS DEL BOT (VERSIÓN INTERACTIVA)
 # ==========================================
 @bot.message_handler(commands=["start"])
 def enviar_bienvenida(mensaje):
     texto = (
         "¡Hola! Tu sistema financiero está listo ☁️💸\n\n"
         "Comandos disponibles:\n"
-        "🟢 /ingreso [cantidad] [concepto]\n"
-        "🔴 /gasto [cantidad] [concepto] [si/no]\n"
-        "🔄 /traspaso [cantidad] [origen] [destino]\n"
-        "📊 /saldos (para ver tu dinero)\n"
-        "⚙️ /retiro [cantidad] [cuenta] [concepto]\n"
-        "🎯 /meta [cantidad] (fija tu objetivo de hucha)\n"
-        "⚖️ /cierre (vacía la cartera y ahorra el sobrante)"
+        "🟢 /ingreso (Sumar dinero)\n"
+        "🔴 /gasto (Restar dinero)\n"
+        "🔄 /traspaso (Mover dinero)\n"
+        "📊 /saldos (Ver tu dinero)\n"
+        "⚙️ /retiro (Ajustar saldo)\n"
+        "🎯 /meta (Fijar objetivo)\n"
+        "⚖️ /cierre (Vaciado semanal)"
     )
     bot.reply_to(mensaje, texto)
+
+# --- COMANDO: GASTO ---
 @bot.message_handler(commands=['gasto'])
-def registro_gasto(mensaje):
-    # Separamos todas las palabras del mensaje
-    trozos = mensaje.text.split()
-    
-    if len(trozos) < 4:
-        bot.reply_to(mensaje, "⚠️ Error. Úsalo así: /gasto [cantidad] [concepto] [si/no]\nEjemplo: /gasto 20 compra mercadona no")
+def preguntar_metodo_gasto(mensaje):
+    teclado = telebot.types.InlineKeyboardMarkup()
+    teclado.row(telebot.types.InlineKeyboardButton("💵 Efectivo", callback_data="gasto_efectivo_si"),
+                telebot.types.InlineKeyboardButton("💳 Tarjeta/Banco", callback_data="gasto_efectivo_no"))
+    bot.reply_to(mensaje, "👇 ¿Cómo has pagado este gasto?", reply_markup=teclado)
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('gasto_efectivo_'))
+def preguntar_datos_gasto(call):
+    es_efectivo = "Si" if call.data == "gasto_efectivo_si" else "No"
+    texto_elegido = "💵 Efectivo" if es_efectivo == "Si" else "💳 Tarjeta/Banco"
+    bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, 
+                          text=f"✅ Método: **{texto_elegido}**\n\n✍️ Escribe CANTIDAD y CONCEPTO.\n*(Ejemplo: 20 compra mercadona)*", parse_mode="Markdown")
+    bot.register_next_step_handler(call.message, guardar_gasto_final, es_efectivo)
+
+def guardar_gasto_final(mensaje, es_efectivo):
+    trozos = mensaje.text.split(" ", 1) 
+    if len(trozos) < 2:
+        bot.reply_to(mensaje, "⚠️ Error. Debes poner cantidad y concepto (Ej: 20 comida). Usa /gasto de nuevo.")
         return
     
-    cantidad = trozos[1]
-    # Extraemos la última palabra (si/no) y la ponemos en mayúscula
-    es_efectivo = trozos[-1].capitalize() 
-    # Unimos todas las palabras del medio para formar el concepto
-    concepto = " ".join(trozos[2:-1])
-    
+    cantidad, concepto = trozos[0], trozos[1]
     fecha_actual = datetime.now().strftime("%Y-%m-%d %H:%M")
 
     try:
         cantidad_num = float(cantidad.replace(",", ".")) 
-        
         saldos = obtener_saldos()
         dinero_total_previo = saldos["Banco"] + saldos["Cartera"] + saldos["Hucha"]
         
-        # REGLA: Si no hay en Cartera, sale del Banco
         if saldos["Cartera"] <= 0:
-            cuenta_afectada = "Banco"
-            aviso = "\n⚠️ *Atención:* Sacado del Banco porque la Cartera está a 0."
+            cuenta_afectada, aviso = "Banco", "\n⚠️ *Atención:* Sacado del Banco porque la Cartera está a 0."
         else:
-            cuenta_afectada = "Cartera"
-            aviso = ""
+            cuenta_afectada, aviso = "Cartera", ""
             
         nuevo_saldo_total = dinero_total_previo - cantidad_num
-            
-        # Ahora sí, la variable es_efectivo existe y se guarda en la columna G
         hoja_registro.append_row([fecha_actual, "Gasto", cuenta_afectada, cantidad_num, concepto, nuevo_saldo_total, es_efectivo])
-        
         saldos_nuevos = obtener_saldos()
         
-        mensaje_final = f"📉 🔴 **¡Gasto apuntado!**\n"
-        mensaje_final += f"Has gastado {formato_eur(cantidad_num)}€ en: *{concepto}*{aviso}\n\n"
-        mensaje_final += f"🏦 **Banco:** {formato_eur(saldos_nuevos['Banco'])}€\n"
-        mensaje_final += f"👛 **Cartera:** {formato_eur(saldos_nuevos['Cartera'])}€\n"
-        mensaje_final += f"🐷 **Hucha:** {formato_eur(saldos_nuevos['Hucha'])}€\n"
-        mensaje_final += f"➡️ **DINERO GLOBAL:** {formato_eur(nuevo_saldo_total)}€"
-        
+        mensaje_final = f"📉 🔴 **¡Gasto apuntado!**\nHas gastado {formato_eur(cantidad_num)}€ en: *{concepto}*{aviso}\n\n"
+        mensaje_final += f"🏦 **Banco:** {formato_eur(saldos_nuevos['Banco'])}€\n👛 **Cartera:** {formato_eur(saldos_nuevos['Cartera'])}€\n🐷 **Hucha:** {formato_eur(saldos_nuevos['Hucha'])}€\n➡️ **DINERO GLOBAL:** {formato_eur(nuevo_saldo_total)}€"
         bot.reply_to(mensaje, mensaje_final, parse_mode="Markdown")
-        
     except ValueError:
-         bot.reply_to(mensaje, "⚠️ Error: La cantidad debe ser un número (ej: 15.50).")
+         bot.reply_to(mensaje, "⚠️ Error numérico. Usa /gasto de nuevo.")
     except Exception as e:
-        bot.reply_to(mensaje, f"❌ Hubo un problema: {e}")
+        bot.reply_to(mensaje, f"❌ Error: {e}")
 
+# --- COMANDO: INGRESO ---
 @bot.message_handler(commands=['ingreso'])
-def registro_ingreso(mensaje):
-    # Separamos todas las palabras del mensaje
-    trozos = mensaje.text.split()
-    
-    if len(trozos) < 4:
-        bot.reply_to(mensaje, "⚠️ Error. Úsalo así: /ingreso [cantidad] [concepto] [si/no]\nEjemplo: /ingreso 50 ingreso cajero si")
+def preguntar_metodo_ingreso(mensaje):
+    teclado = telebot.types.InlineKeyboardMarkup()
+    teclado.row(telebot.types.InlineKeyboardButton("💵 Efectivo", callback_data="ingreso_efectivo_si"),
+                telebot.types.InlineKeyboardButton("💳 Tarjeta/Banco", callback_data="ingreso_efectivo_no"))
+    bot.reply_to(mensaje, "👇 ¿Cómo ha entrado este dinero?", reply_markup=teclado)
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('ingreso_efectivo_'))
+def preguntar_datos_ingreso(call):
+    es_efectivo = "Si" if call.data == "ingreso_efectivo_si" else "No"
+    texto_elegido = "💵 Efectivo" if es_efectivo == "Si" else "💳 Tarjeta/Banco"
+    bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, 
+                          text=f"✅ Método: **{texto_elegido}**\n\n✍️ Escribe CANTIDAD y CONCEPTO.\n*(Ejemplo: 50 regalo abuela)*", parse_mode="Markdown")
+    bot.register_next_step_handler(call.message, guardar_ingreso_final, es_efectivo)
+
+def guardar_ingreso_final(mensaje, es_efectivo):
+    trozos = mensaje.text.split(" ", 1)
+    if len(trozos) < 2:
+        bot.reply_to(mensaje, "⚠️ Error. Faltan datos. Usa /ingreso de nuevo.")
         return
     
-    cantidad = trozos[1]
-    # Extraemos la última palabra (si/no) y la ponemos en formato "Si" o "No"
-    es_efectivo = trozos[-1].capitalize() 
-    # Unimos todas las palabras del medio para formar el concepto
-    concepto = " ".join(trozos[2:-1])
-    
+    cantidad, concepto = trozos[0], trozos[1]
     fecha_actual = datetime.now().strftime("%Y-%m-%d %H:%M")
 
     try:
         cantidad_num = float(cantidad.replace(",", ".")) 
-        
         saldos = obtener_saldos()
-        dinero_total_previo = saldos["Banco"] + saldos["Cartera"] + saldos["Hucha"]
-        nuevo_saldo_total = dinero_total_previo + cantidad_num
+        nuevo_saldo_total = saldos["Banco"] + saldos["Cartera"] + saldos["Hucha"] + cantidad_num
         
-        # REGLA SOLICITADA: El dinero va SIEMPRE a la cuenta del Banco
-        cuenta_afectada = "Banco"
-            
-        # Lo guardamos en el Excel. Al poner 'es_efectivo' en la columna G, 
-        # el bot sabrá si sumarlo a 'En Efectivo' o a 'En Banco/Tarjeta' global.
-        hoja_registro.append_row([fecha_actual, "Ingreso", cuenta_afectada, cantidad_num, concepto, nuevo_saldo_total, es_efectivo])
-        
+        hoja_registro.append_row([fecha_actual, "Ingreso", "Banco", cantidad_num, concepto, nuevo_saldo_total, es_efectivo])
         saldos_nuevos = obtener_saldos()
         
-        mensaje_final = f"📈 🟢 **¡Ingreso apuntado!**\n"
-        mensaje_final += f"Has sumado {formato_eur(cantidad_num)}€ en *{cuenta_afectada}* de: *{concepto}*\n\n"
-        mensaje_final += f"🏦 **Banco:** {formato_eur(saldos_nuevos['Banco'])}€\n"
-        mensaje_final += f"👛 **Cartera:** {formato_eur(saldos_nuevos['Cartera'])}€\n"
-        mensaje_final += f"🐷 **Hucha:** {formato_eur(saldos_nuevos['Hucha'])}€\n"
-        mensaje_final += f"━━━━━━━━━━━━━━\n"
-        mensaje_final += f"➡️ **DINERO GLOBAL:** {formato_eur(nuevo_saldo_total)}€\n"
-        mensaje_final += f"   💵 En Efectivo: {formato_eur(saldos_nuevos['Total_Efectivo'])}€\n"
-        mensaje_final += f"   💳 En Banco/Tarjeta: {formato_eur(saldos_nuevos['Total_Tarjeta'])}€"
-        
+        mensaje_final = f"📈 🟢 **¡Ingreso apuntado!**\nHas sumado {formato_eur(cantidad_num)}€ en *Banco* de: *{concepto}*\n\n"
+        mensaje_final += f"🏦 **Banco:** {formato_eur(saldos_nuevos['Banco'])}€\n👛 **Cartera:** {formato_eur(saldos_nuevos['Cartera'])}€\n🐷 **Hucha:** {formato_eur(saldos_nuevos['Hucha'])}€\n━━━━━━━━━━━━━━\n➡️ **DINERO GLOBAL:** {formato_eur(nuevo_saldo_total)}€\n"
+        mensaje_final += f"   💵 En Efectivo: {formato_eur(saldos_nuevos['Total_Efectivo'])}€\n   💳 En Banco/Tarjeta: {formato_eur(saldos_nuevos['Total_Tarjeta'])}€"
         bot.reply_to(mensaje, mensaje_final, parse_mode="Markdown")
-        
     except ValueError:
-         bot.reply_to(mensaje, "⚠️ Error: La cantidad debe ser un número (ej: 15.50).")
+         bot.reply_to(mensaje, "⚠️ Error numérico. Usa /ingreso de nuevo.")
     except Exception as e:
-        bot.reply_to(mensaje, f"❌ Hubo un problema: {e}")
+        bot.reply_to(mensaje, f"❌ Error: {e}")
 
-@bot.message_handler(commands=['traspaso'])
-def registro_traspaso(mensaje):
-    trozos = mensaje.text.split(" ")
-    
-    if len(trozos) < 4:
-        bot.reply_to(mensaje, "⚠️ Error. Úsalo así: /traspaso [cantidad] [origen] [destino]\nEjemplo: /traspaso 50 banco cartera")
+# --- COMANDO: RETIRO ---
+@bot.message_handler(commands=['retiro'])
+def preguntar_cuenta_retiro(mensaje):
+    teclado = telebot.types.InlineKeyboardMarkup()
+    teclado.row(telebot.types.InlineKeyboardButton("🏦 Banco", callback_data="retiro_cuenta_Banco"),
+                telebot.types.InlineKeyboardButton("👛 Cartera", callback_data="retiro_cuenta_Cartera"),
+                telebot.types.InlineKeyboardButton("🐷 Hucha", callback_data="retiro_cuenta_Hucha"))
+    bot.reply_to(mensaje, "👇 ¿De qué cuenta vas a retirar?", reply_markup=teclado)
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('retiro_cuenta_'))
+def preguntar_datos_retiro(call):
+    cuenta = call.data.split("_")[2]
+    bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, 
+                          text=f"✅ Cuenta: **{cuenta}**\n\n✍️ Escribe CANTIDAD y CONCEPTO.\n*(Ej: 20 ajuste error)*", parse_mode="Markdown")
+    bot.register_next_step_handler(call.message, guardar_retiro_final, cuenta)
+
+def guardar_retiro_final(mensaje, cuenta_afectada):
+    trozos = mensaje.text.split(" ", 1)
+    if len(trozos) < 2:
+        bot.reply_to(mensaje, "⚠️ Error. Faltan datos. Usa /retiro de nuevo.")
         return
     
-    cantidad = trozos[1]
-    origen = trozos[2].capitalize()
-    destino = trozos[3].capitalize()
+    cantidad, concepto = trozos[0], trozos[1]
     fecha_actual = datetime.now().strftime("%Y-%m-%d %H:%M")
     
-    cuentas_validas = ["Banco", "Cartera", "Hucha"]
-
-    if origen not in cuentas_validas or destino not in cuentas_validas:
-        bot.reply_to(mensaje, "⚠️ Error: Las cuentas deben ser Banco, Cartera o Hucha.")
-        return
-
     try:
         cantidad_num = float(cantidad.replace(",", ".")) 
+        saldos = obtener_saldos()
+        nuevo_saldo_total = saldos["Banco"] + saldos["Cartera"] + saldos["Hucha"] - cantidad_num
         
+        efectivo_previo = saldos["Cartera"] + saldos["Hucha"]
+        nuevo_efectivo = efectivo_previo - cantidad_num if cuenta_afectada in ["Cartera", "Hucha"] else efectivo_previo 
+
+        hoja_registro.append_row([fecha_actual, "Retiro", cuenta_afectada, cantidad_num, f"⚙️ {concepto}", nuevo_saldo_total, nuevo_efectivo])
+        saldos_nuevos = obtener_saldos()
+        
+        mensaje_final = f"⚙️ 🔴 **¡Ajuste aplicado!**\nHas restado {formato_eur(cantidad_num)}€ de *{cuenta_afectada}* ({concepto})\n\n"
+        mensaje_final += f"🏦 **Banco:** {formato_eur(saldos_nuevos['Banco'])}€\n👛 **Cartera:** {formato_eur(saldos_nuevos['Cartera'])}€\n🐷 **Hucha:** {formato_eur(saldos_nuevos['Hucha'])}€"
+        bot.reply_to(mensaje, mensaje_final, parse_mode="Markdown")
+    except ValueError:
+         bot.reply_to(mensaje, "⚠️ Error numérico. Usa /retiro de nuevo.")
+    except Exception as e:
+        bot.reply_to(mensaje, f"❌ Error: {e}")
+
+# --- COMANDO: TRASPASO ---
+@bot.message_handler(commands=['traspaso'])
+def preguntar_origen_traspaso(mensaje):
+    teclado = telebot.types.InlineKeyboardMarkup()
+    teclado.row(telebot.types.InlineKeyboardButton("🏦 Banco", callback_data="trasp_orig_Banco"),
+                telebot.types.InlineKeyboardButton("👛 Cartera", callback_data="trasp_orig_Cartera"),
+                telebot.types.InlineKeyboardButton("🐷 Hucha", callback_data="trasp_orig_Hucha"))
+    bot.reply_to(mensaje, "👇 ¿Desde dónde sale el dinero?", reply_markup=teclado)
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('trasp_orig_'))
+def preguntar_destino_traspaso(call):
+    origen = call.data.split("_")[2]
+    teclado = telebot.types.InlineKeyboardMarkup()
+    for cuenta in ["Banco", "Cartera", "Hucha"]:
+        if cuenta != origen:
+            teclado.add(telebot.types.InlineKeyboardButton(f"➡️ Hacia {cuenta}", callback_data=f"trasp_dest_{origen}_{cuenta}"))
+            
+    bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, 
+                          text=f"✅ Origen: **{origen}**\n👇 ¿A dónde va el dinero?", reply_markup=teclado)
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('trasp_dest_'))
+def preguntar_cantidad_traspaso(call):
+    datos = call.data.split("_")
+    origen, destino = datos[2], datos[3]
+    bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, 
+                          text=f"🔄 Traspaso: **{origen} ➡️ {destino}**\n\n✍️ Escribe solo la CANTIDAD.\n*(Ejemplo: 50)*", parse_mode="Markdown")
+    bot.register_next_step_handler(call.message, guardar_traspaso_final, origen, destino)
+
+def guardar_traspaso_final(mensaje, origen, destino):
+    try:
+        cantidad_num = float(mensaje.text.replace(",", ".")) 
+        fecha_actual = datetime.now().strftime("%Y-%m-%d %H:%M")
         saldos = obtener_saldos()
         dinero_total = saldos["Banco"] + saldos["Cartera"] + saldos["Hucha"]
         
-        # Guardamos las dos operaciones
         hoja_registro.append_row([fecha_actual, "Gasto", origen, cantidad_num, f"🔄 A {destino}", dinero_total, "-"])
         hoja_registro.append_row([fecha_actual, "Ingreso", destino, cantidad_num, f"🔄 Desde {origen}", dinero_total, "-"])
-        
         saldos_nuevos = obtener_saldos()
         
-        mensaje_final = f"🔄 **¡Traspaso completado!**\n"
-        mensaje_final += f"Has movido {cantidad_num}€ de *{origen}* a *{destino}*\n\n"
-        mensaje_final += f"🏦 **Banco:** {saldos_nuevos['Banco']:.2f}€\n"
-        mensaje_final += f"👛 **Cartera:** {saldos_nuevos['Cartera']:.2f}€\n"
-        mensaje_final += f"🐷 **Hucha:** {saldos_nuevos['Hucha']:.2f}€\n"
-        
+        mensaje_final = f"🔄 **¡Traspaso completado!**\nHas movido {formato_eur(cantidad_num)}€ de *{origen}* a *{destino}*\n\n"
+        mensaje_final += f"🏦 **Banco:** {formato_eur(saldos_nuevos['Banco'])}€\n👛 **Cartera:** {formato_eur(saldos_nuevos['Cartera'])}€\n🐷 **Hucha:** {formato_eur(saldos_nuevos['Hucha'])}€"
         bot.reply_to(mensaje, mensaje_final, parse_mode="Markdown")
-        
     except ValueError:
-         bot.reply_to(mensaje, "⚠️ Error: La cantidad debe ser un número (ej: 15.50).")
+         bot.reply_to(mensaje, "⚠️ Error. Debes escribir un número. Usa /traspaso de nuevo.")
     except Exception as e:
-        bot.reply_to(mensaje, f"❌ Hubo un problema al hacer el traspaso: {e}")
+        bot.reply_to(mensaje, f"❌ Error: {e}")
 
+# --- COMANDO: META ---
+@bot.message_handler(commands=['meta'])
+def preguntar_meta(mensaje):
+    bot.reply_to(mensaje, "🎯 ¿Cuál es tu nuevo objetivo para la hucha?\n✍️ Escribe solo el número (Ej: 1500)")
+    bot.register_next_step_handler(mensaje, guardar_meta_final)
+
+def guardar_meta_final(mensaje):
+    try:
+        nueva_meta = float(mensaje.text.replace(",", "."))
+        guardar_meta(nueva_meta)
+        bot.reply_to(mensaje, f"🎯 ¡Meta actualizada! Tu nuevo objetivo es {formato_eur(nueva_meta)}€.")
+    except ValueError:
+        bot.reply_to(mensaje, "⚠️ Error. Debes escribir un número. Usa /meta de nuevo.")
+
+# --- COMANDOS INSTANTÁNEOS (Sin botones) ---
 @bot.message_handler(commands=['saldos'])
 def ver_saldos(mensaje):
     try:
         saldos = obtener_saldos()
         dinero_total = saldos["Banco"] + saldos["Cartera"] + saldos["Hucha"]
-        
-        # Leemos la meta que haya guardada y pintamos la barra
         meta_actual = obtener_meta()
         barra_hucha = barra_progreso(saldos['Hucha'], meta_actual)
         
@@ -269,62 +317,30 @@ def ver_saldos(mensaje):
         
         bot.reply_to(mensaje, mensaje_final, parse_mode="Markdown")
     except Exception as e:
-        bot.reply_to(mensaje, f"❌ Hubo un problema al leer los saldos: {e}")
-@bot.message_handler(commands=['retiro'])
-def registro_retiro(mensaje):
-    # Separamos en 4 partes: comando, cantidad, cuenta, concepto
-    trozos = mensaje.text.split(" ", 3) 
-    
-    if len(trozos) < 4:
-        bot.reply_to(mensaje, "⚠️ Error. Úsalo así: /retiro [cantidad] [cuenta] [concepto]\nEjemplo: /retiro 50 Banco Error tecleo")
-        return
-    
-    cantidad = trozos[1]
-    cuenta_afectada = trozos[2].capitalize()
-    concepto = trozos[3]
-    fecha_actual = datetime.now().strftime("%Y-%m-%d %H:%M")
-    
-    cuentas_validas = ["Banco", "Cartera", "Hucha"]
+        bot.reply_to(mensaje, f"❌ Error al leer los saldos: {e}")
 
-    if cuenta_afectada not in cuentas_validas:
-        bot.reply_to(mensaje, "⚠️ Error: Las cuentas deben ser Banco, Cartera o Hucha.")
-        return
-
+@bot.message_handler(commands=['cierre'])
+def cierre_semanal(mensaje):
     try:
-        cantidad_num = float(cantidad.replace(",", ".")) 
-        
         saldos = obtener_saldos()
-        
-        # 1. Calculamos nuevo saldo global
-        dinero_total_previo = saldos["Banco"] + saldos["Cartera"] + saldos["Hucha"]
-        nuevo_saldo_total = dinero_total_previo - cantidad_num
-            
-        # 2. Calculamos el nuevo saldo de EFECTIVO
-        efectivo_previo = saldos["Cartera"] + saldos["Hucha"]
-        if cuenta_afectada in ["Cartera", "Hucha"]:
-            nuevo_efectivo = efectivo_previo - cantidad_num
-        else:
-            # Si sacas del banco, el dinero físico (efectivo) no cambia
-            nuevo_efectivo = efectivo_previo 
+        saldo_cartera = saldos["Cartera"]
+        dinero_total = saldos["Banco"] + saldos["Cartera"] + saldos["Hucha"]
+        fecha_actual = datetime.now().strftime("%Y-%m-%d %H:%M")
 
-        # 3. Lo guardamos en el Excel (Cambiado a "Retiro" por seguridad y añadido nuevo_efectivo)
-        hoja_registro.append_row([fecha_actual, "Retiro", cuenta_afectada, cantidad_num, f"⚙️ {concepto}", nuevo_saldo_total, nuevo_efectivo])
-        
-        saldos_nuevos = obtener_saldos()
-        
-        mensaje_final = f"⚙️ 🔴 **¡Ajuste aplicado!**\n"
-        mensaje_final += f"Has restado {formato_eur(cantidad_num)}€ de *{cuenta_afectada}* ({concepto})\n\n"
-        mensaje_final += f"🏦 **Banco:** {formato_eur(saldos_nuevos['Banco'])}€\n"
-        mensaje_final += f"👛 **Cartera:** {formato_eur(saldos_nuevos['Cartera'])}€\n"
-        mensaje_final += f"🐷 **Hucha:** {formato_eur(saldos_nuevos['Hucha'])}€\n"
-        
-        bot.reply_to(mensaje, mensaje_final, parse_mode="Markdown")
-        
-    except ValueError:
-         bot.reply_to(mensaje, "⚠️ Error: La cantidad debe ser un número (ej: 15.50).")
+        if saldo_cartera > 0:
+            hoja_registro.append_row([fecha_actual, "Gasto", "Cartera", saldo_cartera, "🏁 Cierre: Vaciado de Cartera", dinero_total, "-"])
+            hoja_registro.append_row([fecha_actual, "Ingreso", "Hucha", saldo_cartera, "🎉 Cierre: Ahorro semanal", dinero_total, "-"])
+            saldos_nuevos = obtener_saldos()
+            
+            mensaje_final = f"🏆 **¡CIERRE SEMANAL SUPERADO!** 🏆\n\nTe han sobrado {formato_eur(saldo_cartera)}€.\nSe han guardado en tu **Hucha** 🐷.\n\n"
+            mensaje_final += f"🏦 **Banco:** {formato_eur(saldos_nuevos['Banco'])}€\n👛 **Cartera:** {formato_eur(saldos_nuevos['Cartera'])}€\n🐷 **Hucha:** {formato_eur(saldos_nuevos['Hucha'])}€"
+            bot.reply_to(mensaje, mensaje_final, parse_mode="Markdown")
+        elif saldo_cartera == 0:
+            bot.reply_to(mensaje, "⚖️ **CIERRE SEMANAL**\nHas clavado el presupuesto exacto. Tu Cartera está a 0€.", parse_mode="Markdown")
+        else:
+            bot.reply_to(mensaje, "⚠️ **NÚMEROS ROJOS**\nTu cartera está en negativo.", parse_mode="Markdown")
     except Exception as e:
-        bot.reply_to(mensaje, f"❌ Hubo un problema al hacer el ajuste: {e}")
-# ==========================================
+        bot.reply_to(mensaje, f"❌ Error al hacer el cierre: {e}")
 def formato_eur(numero):
     """Convierte 1250.5 a '1.250,50'"""
     texto = f"{numero:,.2f}"
