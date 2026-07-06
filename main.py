@@ -159,11 +159,11 @@ def registro_ingreso(mensaje):
     trozos = mensaje.text.split()
     
     if len(trozos) < 4:
-        bot.reply_to(mensaje, "⚠️ Error. Úsalo así: /ingreso [cantidad] [concepto] [si/no]\nEjemplo: /ingreso 50 bizum abuela no")
+        bot.reply_to(mensaje, "⚠️ Error. Úsalo así: /ingreso [cantidad] [concepto] [si/no]\nEjemplo: /ingreso 50 ingreso cajero si")
         return
     
     cantidad = trozos[1]
-    # Extraemos la última palabra (si/no) y la ponemos en mayúscula
+    # Extraemos la última palabra (si/no) y la ponemos en formato "Si" o "No"
     es_efectivo = trozos[-1].capitalize() 
     # Unimos todas las palabras del medio para formar el concepto
     concepto = " ".join(trozos[2:-1])
@@ -177,12 +177,11 @@ def registro_ingreso(mensaje):
         dinero_total_previo = saldos["Banco"] + saldos["Cartera"] + saldos["Hucha"]
         nuevo_saldo_total = dinero_total_previo + cantidad_num
         
-        # REGLA: Si es efectivo va a la Cartera, si no, va al Banco
-        if es_efectivo.lower() in ["si", "sí"]:
-            cuenta_afectada = "Cartera"
-        else:
-            cuenta_afectada = "Banco"
+        # REGLA SOLICITADA: El dinero va SIEMPRE a la cuenta del Banco
+        cuenta_afectada = "Banco"
             
+        # Lo guardamos en el Excel. Al poner 'es_efectivo' en la columna G, 
+        # el bot sabrá si sumarlo a 'En Efectivo' o a 'En Banco/Tarjeta' global.
         hoja_registro.append_row([fecha_actual, "Ingreso", cuenta_afectada, cantidad_num, concepto, nuevo_saldo_total, es_efectivo])
         
         saldos_nuevos = obtener_saldos()
@@ -192,7 +191,10 @@ def registro_ingreso(mensaje):
         mensaje_final += f"🏦 **Banco:** {formato_eur(saldos_nuevos['Banco'])}€\n"
         mensaje_final += f"👛 **Cartera:** {formato_eur(saldos_nuevos['Cartera'])}€\n"
         mensaje_final += f"🐷 **Hucha:** {formato_eur(saldos_nuevos['Hucha'])}€\n"
-        mensaje_final += f"➡️ **DINERO GLOBAL:** {formato_eur(nuevo_saldo_total)}€"
+        mensaje_final += f"━━━━━━━━━━━━━━\n"
+        mensaje_final += f"➡️ **DINERO GLOBAL:** {formato_eur(nuevo_saldo_total)}€\n"
+        mensaje_final += f"   💵 En Efectivo: {formato_eur(saldos_nuevos['Total_Efectivo'])}€\n"
+        mensaje_final += f"   💳 En Banco/Tarjeta: {formato_eur(saldos_nuevos['Total_Tarjeta'])}€"
         
         bot.reply_to(mensaje, mensaje_final, parse_mode="Markdown")
         
